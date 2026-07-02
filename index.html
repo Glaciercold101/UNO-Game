@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>UNO Spark</title>
+<title>UNO Spark Pro</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <style>
 :root{
@@ -95,9 +95,23 @@ html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe U
   .pile{width:92px;height:128px}.piles{gap:36px}
   .opponents{gap:8px}.opponent{padding:8px}
 }
+/* --- Pro animations --- */
+.card.fly{animation:cardFly .42s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes cardFly{0%{transform:translateY(0) scale(1);opacity:1}60%{opacity:1}100%{transform:translateY(-160px) scale(.9) rotate(6deg);opacity:0}}
+.card.deal{animation:dealIn .34s ease-out}
+@keyframes dealIn{0%{transform:translateY(-70px) rotate(-10deg);opacity:0}100%{transform:translateY(0) rotate(0);opacity:1}}
+.shake{animation:shakeX .18s}
+@keyframes shakeX{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.hand .card.playable{animation:glowPulse 1.6s infinite}
+@keyframes glowPulse{0%,100%{box-shadow:0 0 0 3px #fde047,0 10px 24px rgba(0,0,0,.55)}50%{box-shadow:0 0 0 5px #fef08a,0 14px 30px rgba(253,224,71,.6)}}
 </style>
 </head>
 <body>
+<audio id="sfx-shipbell" preload="auto" src="sounds/ship-bell-two-chimes-102730.mp3"></audio>
+<audio id="sfx-flip" preload="auto" src="sounds/flipcard-91468.mp3"></audio>
+<audio id="sfx-send" preload="auto" src="sounds/cardsound32562-37691.mp3"></audio>
+<audio id="sfx-win" preload="auto" src="sounds/player-wins-94889.mp3"></audio>
+
 <div id="app">
   <header class="top-bar">
     <div id="opponents" class="opponents"></div>
@@ -156,61 +170,65 @@ html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe U
   const sym={skip:'⦸',reverse:'⇄',draw2:'+2',wild:'✦',wild4:'+4'};
   let ctx=null,soundOn=true;
   const initAudio=()=>{if(!ctx)ctx=new(window.AudioContext||window.webkitAudioContext)()};
-  const beep=(f=600,d=.08,t='sine',v=.14)=>{if(!soundOn||!ctx)return;const o=ctx.createOscillator(),g=ctx.createGain();o.type=t;o.frequency.value=f;o.connect(g);g.connect(ctx.destination);g.gain.setValueAtTime(v,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+d);o.start();o.stop(ctx.currentTime+d)};
-  const tone=t=>{initAudio();switch(t){case'play':beep(720,.07,'square',.16);break;case'draw':beep(320,.06,'sine',.12);break;case'win':[784,988,1175,1568].forEach((f,i)=>setTimeout(()=>beep(f,.11,'triangle',.16),i*120));break;case'bad':beep(180,.15,'square',.15);break}};
+  const beep=(f=600,d=.08,t='sine',v=.14)=>{if(!soundOn||!ctx)return;const o=ctx.createOscillator(),g=ctx.createGain();o.type=t;o.frequency.setValueAtTime(f,ctx.currentTime);o.connect(g);g.connect(ctx.destination);g.gain.setValueAtTime(v,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+d);o.start();o.stop(ctx.currentTime+d)};
+  const noise=(d=.12,v=.2)=>{if(!soundOn||!ctx)return;const buffer=ctx.createBuffer(1,ctx.sampleRate*d,ctx.sampleRate);const data=buffer.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/data.length,2);const src=ctx.createBufferSource();src.buffer=buffer;const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=800;const g=ctx.createGain();g.gain.value=v;src.connect(f);f.connect(g);g.connect(ctx.destination);src.start()};
+  const whoosh=()=>{noise(.09,.18);beep(900,.07,'sawtooth',.09);setTimeout(()=>beep(600,.06,'sine',.07),40)};
+  const playFile = (id, vol=1) => { try { const a=document.getElementById(id); if(!a || !a.src) return false; a.currentTime=0; a.volume=vol*(soundOn?1:0); a.play().catch(()=>{}); return true; } catch(e){ return false } };
+
+  const tone=t=>{initAudio();switch(t){case'play': if(!playFile('sfx-send',0.9)) whoosh(); break;case'draw': if(!playFile('sfx-flip',0.9)){beep(420,.05,'triangle',.12);setTimeout(()=>beep(340,.05,'triangle',.1),60);noise(.06,.12);} break;case'win': if(!playFile('sfx-win',1)){[784,988,1175,1568].forEach((f,i)=>setTimeout(()=>beep(f,.11,'triangle',.16),i*120));noise(.2,.15);} break;case'bad': beep(180,.15,'square',.15);setTimeout(()=>beep(140,.12,'sawtooth',.12),110);break;case'shuffle': for(let i=0;i<5;i++)setTimeout(()=>noise(.04,.1),i*60);break}};
 
   function playKidsUno(){
+    if(playFile('sfx-shipbell',1)){ setTimeout(()=>{ if(soundOn && 'speechSynthesis' in window){ try{ const u=new SpeechSynthesisUtterance('UNO!'); u.pitch=1.7; u.rate=1.15; u.volume=0.85; const voices=speechSynthesis.getVoices(); if(voices.length){ const v=voices.find(v=>/en/i.test(v.lang)&&/female|child/i.test(v.name)); if(v) u.voice=v; } speechSynthesis.speak(u);}catch(e){} } },220); return; }
+
     initAudio();
     if(!soundOn) return;
+    tone('play');
     if('speechSynthesis' in window){
       try{
         window.speechSynthesis.cancel();
+        const phrases=['UNO!','Uno!','U-NO!'];
         for(let i=0;i<3;i++){
           setTimeout(()=>{
-            const u=new SpeechSynthesisUtterance('UNO!');
-            u.pitch=1.7+Math.random()*0.3;
-            u.rate=1.2+Math.random()*0.2;
+            const u=new SpeechSynthesisUtterance(phrases[i%phrases.length]);
+            u.pitch=1.6+Math.random()*0.4;
+            u.rate=1.15+Math.random()*0.25;
             u.volume=1;
             const voices=speechSynthesis.getVoices();
             if(voices && voices.length){
-              const v=voices.find(v=>/en/i.test(v.lang) && /female|child|kid|zira|samantha/i.test(v.name)) || voices.find(v=>/en/.test(v.lang)) || voices[0];
-              if(v) u.voice=v;
+              const kid=voices.find(v=>/en/i.test(v.lang) && /child|kid|young|zira|samantha|google uk english female/i.test(v.name));
+              const fem=voices.find(v=>/en/.test(v.lang) && /female/i.test(v.name));
+              u.voice=kid||fem||voices[0];
             }
             speechSynthesis.speak(u);
-          }, i*(60+Math.random()*60));
+            setTimeout(()=>{const e=new SpeechSynthesisUtterance('uno');e.pitch=u.pitch-0.2;e.rate=u.rate*0.95;e.volume=0.6;e.voice=u.voice;speechSynthesis.speak(e)},120);
+          }, i*70);
         }
-      }catch(e){
-        beep(880,.09,'sawtooth',.18);setTimeout(()=>beep(1175,.09,'sawtooth',.18),110);
-      }
-    }else{
-      beep(880,.09,'sawtooth',.18);setTimeout(()=>beep(1175,.09,'sawtooth',.18),110);
+      }catch(e){beep(880,.09,'sawtooth',.18)}
     }
   }
 
   function playKidsGotcha(){
     initAudio();
     if(!soundOn) return;
+    tone('bad');
     if('speechSynthesis' in window){
       try{
+        const lines=['Gotcha!','Caught you!','No UNO!'];
         for(let i=0;i<2;i++){
           setTimeout(()=>{
-            const u=new SpeechSynthesisUtterance('Gotcha!');
-            u.pitch=1.4+Math.random()*0.3;
-            u.rate=1.1+Math.random()*0.2;
+            const u=new SpeechSynthesisUtterance(lines[Math.floor(Math.random()*lines.length)]);
+            u.pitch=1.3+Math.random()*0.3;
+            u.rate=1.05+Math.random()*0.2;
             u.volume=1;
             const voices=speechSynthesis.getVoices();
             if(voices && voices.length){
-              const v=voices.find(v=>/en/i.test(v.lang) && /female|child|kid|zira|samantha/i.test(v.name)) || voices.find(v=>/en/.test(v.lang)) || voices[0];
+              const v=voices.find(v=>/en/i.test(v.lang) && /child|kid|female/i.test(v.name))||voices[0];
               if(v) u.voice=v;
             }
             speechSynthesis.speak(u);
-          }, i*80);
+          }, i*90);
         }
-      }catch(e){
-        beep(600,.1,'square',.16);setTimeout(()=>beep(400,.12,'square',.16),90);
-      }
-    }else{
-      beep(600,.1,'square',.16);setTimeout(()=>beep(400,.12,'square',.16),90);
+      }catch(e){}
     }
   }
 
@@ -230,7 +248,7 @@ html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe U
     for(let i=0;i<7;i++)game.players.forEach(p=>p.hand.push(game.deck.pop()));
     let first;do{first=game.deck.pop()}while(first.color==='wild'||['skip','reverse','draw2','wild4'].includes(first.value));
     game.discard.push(first);game.color=first.color;game.value=first.value;
-    $('gameLog').innerHTML='';log(`Start • ${first.color} ${first.value}`);
+    $('gameLog').innerHTML='';tone('shuffle');log(`Start • ${first.color} ${first.value}`);
     renderAll();startTurn();
   }
   const reshuffle=()=>{const top=game.discard.pop();game.deck=shuffle(game.discard);game.discard=[top];log('Reshuffled')};
@@ -252,7 +270,7 @@ html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe U
   function renderCenter(){$('discardPile').innerHTML='';$('discardPile').appendChild(createCardEl(game.discard.at(-1),true));$('drawPile').innerHTML=`<div class="card-back">DRAW</div><div class="stack-count">${game.deck.length}</div>`;$('direction').textContent=game.dir===1?'→':'←'}
   function renderTurn(){$('turnIndicator').textContent=`${game.players[game.current].name}`;}
   function renderRing(){$('colorRing').style.boxShadow=`0 0 0 4px ${colorHex[game.color]},0 0 26px ${colorHex[game.color]}99`}
-  function renderHand(){const h=$('playerHand');h.innerHTML='';const me=game.players[0];me.hand.forEach((c,i)=>{const el=createCardEl(c);const off=i-(me.hand.length-1)/2;const rot=off*3.6;el.style.transform=`rotate(${rot}deg)`;el.style.zIndex=i;const playable=game.current===0&&canPlay(c)&&!game.over;if(playable)el.classList.add('playable');else if(game.current===0)el.classList.add('disabled');el.tabIndex=0;el.onclick=()=>{if(game.current!==0||game.over)return;if(!canPlay(c)){tone('bad');el.animate([{transform:`rotate(${rot}deg) translateX(-3px)`},{transform:`rotate(${rot}deg) translateX(3px)`},{transform:`rotate(${rot}deg)`}],{duration:180});return}playHuman(c)};el.onkeydown=e=>{if(e.key==='Enter'||e.key===' ')el.click()};h.appendChild(el)});updateUno()}
+  function renderHand(){const h=$('playerHand');h.innerHTML='';const me=game.players[0];me.hand.forEach((c,i)=>{const el=createCardEl(c);const off=i-(me.hand.length-1)/2;const rot=off*3.6;el.style.transform=`rotate(${rot}deg)`;el.style.zIndex=i;const playable=game.current===0&&canPlay(c)&&!game.over;if(playable)el.classList.add('playable');else if(game.current===0)el.classList.add('disabled');el.tabIndex=0;el.onclick=()=>{if(game.current!==0||game.over)return;if(!canPlay(c)){tone('bad');el.classList.add('shake');setTimeout(()=>el.classList.remove('shake'),200);return}el.classList.add('fly');setTimeout(()=>playHuman(c),160)};el.onkeydown=e=>{if(e.key==='Enter'||e.key===' ')el.click()};h.appendChild(el)});updateUno()}
   const renderAll=()=>{renderOpponents();renderCenter();renderHand();renderTurn();renderRing()};
   const updateUno=()=>{$('unoBtn').classList.toggle('glow',game.players[0].hand.length===1&&game.players[0].uno==='pending')};
 
