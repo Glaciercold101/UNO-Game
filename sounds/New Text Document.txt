@@ -1,0 +1,12 @@
+   /sounds/play.mp3
+   /sounds/draw.mp3
+   /sounds/coin.mp3
+   /sounds/combo.mp3
+   /sounds/uno.mp3
+   /sounds/gotcha.mp3
+   /sounds/win.mp3
+   /sounds/wild.mp3
+   /sounds/shuffle.mp3
+   /sounds/buy.mp3
+   /sounds/shield.mp3
+   /sounds/lose.mp3
